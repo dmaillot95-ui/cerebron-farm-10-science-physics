@@ -17,32 +17,12 @@ jobs:
         run: |
           import json, os
           roles = [
-            ('CLASSICAL_MECHANICS_SPECIALIST','llama','mechanics and variational principles'),
-            ('RELATIVITY_SPECIALIST','gemma','special and general relativity'),
-            ('QUANTUM_SPECIALIST','llama','quantum mechanics and measurement'),
-            ('QFT_SPECIALIST','gemma','quantum field theory and effective theories'),
-            ('ELECTROMAGNETISM_SPECIALIST','llama','Maxwell theory and electrodynamics'),
-            ('THERMODYNAMICS_SPECIALIST','gemma','thermodynamics and statistical mechanics'),
-            ('FLUID_DYNAMICS_SPECIALIST','llama','fluid mechanics and transport'),
-            ('PLASMA_PHYSICS_SPECIALIST','gemma','plasma physics and MHD'),
-            ('NUCLEAR_PHYSICS_SPECIALIST','llama','nuclear physics and reactions'),
-            ('CONDENSED_MATTER_SPECIALIST','gemma','condensed matter and materials physics'),
-            ('ASTROPHYSICS_SPECIALIST','llama','stellar, galactic and high-energy astrophysics'),
-            ('COSMOLOGY_SPECIALIST','gemma','cosmology and observational constraints'),
-            ('METROLOGY_UNCERTAINTY_AUDITOR','llama','measurement, uncertainty and calibration'),
-            ('DIMENSIONAL_ANALYSIS_AUDITOR','gemma','units, scaling and dimensional consistency'),
-            ('MODEL_VALIDITY_AUDITOR','llama','approximations, regimes and model validity'),
-            ('EXPERIMENT_DESIGNER','gemma','falsifiable experiments and discriminating tests'),
-            ('FALSIFIER_RED_TEAM','llama','counterexamples and failure modes'),
-            ('INDEPENDENT_REPLICATOR','gemma','independent rederivation and replication'),
-            ('PHYSICS_SYNTHESIZER','llama','cross-domain synthesis with claim ledger'),
-            ('FINAL_JUDGE','gemma','classify evidence without overclaiming')]
+            ('CLASSICAL_MECHANICS_SPECIALIST','llama','mechanics and variational principles'),('RELATIVITY_SPECIALIST','gemma','special and general relativity'),('QUANTUM_SPECIALIST','llama','quantum mechanics and measurement'),('QFT_SPECIALIST','gemma','quantum field theory and effective theories'),('ELECTROMAGNETISM_SPECIALIST','llama','Maxwell theory and electrodynamics'),('THERMODYNAMICS_SPECIALIST','gemma','thermodynamics and statistical mechanics'),('FLUID_DYNAMICS_SPECIALIST','llama','fluid mechanics and transport'),('PLASMA_PHYSICS_SPECIALIST','gemma','plasma physics and MHD'),('NUCLEAR_PHYSICS_SPECIALIST','llama','nuclear physics and reactions'),('CONDENSED_MATTER_SPECIALIST','gemma','condensed matter and materials physics'),('ASTROPHYSICS_SPECIALIST','llama','stellar, galactic and high-energy astrophysics'),('COSMOLOGY_SPECIALIST','gemma','cosmology and observational constraints'),('METROLOGY_UNCERTAINTY_AUDITOR','llama','measurement, uncertainty and calibration'),('DIMENSIONAL_ANALYSIS_AUDITOR','gemma','units, scaling and dimensional consistency'),('MODEL_VALIDITY_AUDITOR','llama','approximations, regimes and model validity'),('EXPERIMENT_DESIGNER','gemma','falsifiable experiments and discriminating tests'),('FALSIFIER_RED_TEAM','llama','counterexamples and failure modes'),('INDEPENDENT_REPLICATOR','gemma','independent rederivation and replication'),('PHYSICS_SYNTHESIZER','llama','cross-domain synthesis with claim ledger'),('FINAL_JUDGE','gemma','classify evidence without overclaiming')]
           include=[]
           for role,m,f in roles:
             model='huggingface-projects/llama-3.2-3B-Instruct' if m=='llama' else 'huggingface-projects/gemma-2-9b-it'
             include.append({'role':role,'model':model,'focus':f})
-          with open(os.environ['GITHUB_OUTPUT'],'a') as g:
-            g.write('matrix='+json.dumps({'include':include})+'\n')
+          with open(os.environ['GITHUB_OUTPUT'],'a') as g: g.write('matrix='+json.dumps({'include':include})+'\n')
 
   physics-agent:
     needs: plan
@@ -62,8 +42,9 @@ jobs:
           python-version: '3.11'
       - run: pip install --quiet hf-gradio
       - name: Execute physics agent
-        run: python worker/farm_worker.py
+        run: python worker/adaptive_worker.py
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: physics-${{ matrix.role }}
           path: results/${{ matrix.role }}.json
@@ -85,14 +66,8 @@ jobs:
           for p in glob.glob('inputs/*.json'):
             try: rows.append(json.load(open(p)))
             except Exception as e: rows.append({'file':p,'success':False,'error':repr(e)})
-          packet={
-            'farm':'10-science-physics',
-            'roles_expected':20,
-            'results_received':len(rows),
-            'successful_external_ai_calls':sum(bool(r.get('success')) for r in rows),
-            'model_families':sorted(set(r.get('model','') for r in rows if r.get('model'))),
-            'status':'UNREVIEWED_EXTERNAL_AGENT_OUTPUT',
-            'results':rows}
+          ok=[r for r in rows if r.get('success')]
+          packet={'farm':'10-science-physics','roles_expected':20,'results_received':len(rows),'successful_external_ai_calls':len(ok),'failed_external_ai_calls':len(rows)-len(ok),'model_families':sorted(set(r.get('model','') for r in ok if r.get('model'))),'status':'UNREVIEWED_EXTERNAL_AGENT_OUTPUT' if ok else 'EXTERNAL_INFERENCE_FAILED','results':rows}
           pathlib.Path('omega').mkdir(exist_ok=True)
           pathlib.Path('omega/farm-10-physics-omega.json').write_text(json.dumps(packet,ensure_ascii=False,indent=2))
           print(json.dumps({k:v for k,v in packet.items() if k!='results'},indent=2))
